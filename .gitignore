@@ -1,0 +1,18 @@
+# Sensitive financial data
+data/input/*
+!data/input/.gitkeep
+data/output/
+
+# Personal tagging rules
+config/rules_private.py
+
+# Python
+__pycache__/
+*.py[cod]
+
+# IDE
+.idea/
+.vscode/
+
+# Ruff cache
+.ruff_cache/
