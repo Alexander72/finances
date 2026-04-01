@@ -1,6 +1,6 @@
 # finances
 
-Personal finance transaction parser supporting ING and ABNAMRO bank exports.
+Personal finance transaction parser supporting ING, ABNAMRO, and ICS bank exports.
 
 Reads raw files from `data/input/`, enriches each transaction with tags and a resolved datetime, and writes cleaned CSVs to `data/output/`.
 
@@ -13,7 +13,7 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp config/rules_private.example.py config/rules_private.py
 # edit config/rules_private.py — add your TAG_RULES and DATE_RULES
-# drop ING *.csv and/or ABNAMRO *.xls files into data/input/
+# drop ING *.csv, ABNAMRO *.xls, and/or ICS *.pdf files into data/input/
 ```
 
 ## Usage
@@ -23,7 +23,7 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 python transaction-parser.py
 ```
 
-ABNAMRO `.xls` files are automatically converted to `.csv` before parsing. One output file is produced per input file: `data/output/<name>_PARSED.csv`.
+ABNAMRO `.xls` and ICS `.pdf` files are automatically converted to `.csv` before parsing. All transactions are merged into a single output file: `data/output/transactions.csv`.
 
 ## Supported formats
 
@@ -31,6 +31,7 @@ ABNAMRO `.xls` files are automatically converted to `.csv` before parsing. One o
 |---|---|---|
 | ING | `.csv` | Filename must contain `ING`; datetime extracted from memo field |
 | ABNAMRO | `.xls` | Filename must contain `ABNAMRO`; auto-converted to CSV; no time info |
+| ICS | `.pdf` | Filename must contain `ICS`; auto-converted to CSV; no time info |
 
 ## Output columns
 
@@ -70,7 +71,7 @@ Boundaries accept `YYYY-MM-DD` (date-only expands to `00:00:00` / `23:59:59`) or
 
 ```
 transaction-parser.py        entry point (convert phase → parse phase)
-requirements.txt             Python dependencies (xlrd)
+requirements.txt             Python dependencies (xlrd, pdfplumber)
 config/
   rules.py                   folder paths; re-exports from rules_private
   rules_private.py           personal tagging rules (gitignored)
@@ -85,11 +86,13 @@ processors/
 converters/
   base.py                    abstract FileConverter
   xls_to_csv.py              XlsToCsvConverter: ABNAMRO .xls → .csv
+  ics_pdf_to_csv.py          IcsPdfConverter: ICS .pdf → .csv
 readers/
   base.py                    abstract BankReader
   registry.py                ReaderRegistry: selects reader by filename
   ing.py                     ING CSV reader + datetime extraction
   abnamro.py                 ABNAMRO CSV reader + name extraction
+  ics.py                     ICS CSV reader (converted from PDF)
 writers/
   csv_writer.py              writes output CSVs
 data/

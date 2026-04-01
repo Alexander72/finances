@@ -2,14 +2,14 @@ from pathlib import Path
 from datetime import datetime
 
 from config import INPUT_FOLDER, OUTPUT_FOLDER, NAME_TAG_RULES, DATE_RANGE_TAG_RULES
-from converters import XlsToCsvConverter
+from converters import XlsToCsvConverter, IcsPdfConverter
 from pipeline import Pipeline
 from processors import NameTagProcessor, DateTagProcessor
-from readers import IngReader, AbnAmroReader, ReaderRegistry
+from readers import IngReader, AbnAmroReader, IcsReader, ReaderRegistry
 from writers import CsvWriter
 
 # --- converters ---
-converters = [XlsToCsvConverter()]
+converters = [XlsToCsvConverter(), IcsPdfConverter()]
 
 # --- pipeline ---
 pipeline = Pipeline(
@@ -18,7 +18,7 @@ pipeline = Pipeline(
 )
 
 # --- readers ---
-reader_registry = ReaderRegistry([IngReader(), AbnAmroReader()])
+reader_registry = ReaderRegistry([IngReader(), AbnAmroReader(), IcsReader()])
 
 # --- writer ---
 writer = CsvWriter(OUTPUT_FOLDER)

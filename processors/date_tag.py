@@ -33,7 +33,7 @@ class DateTagProcessor(TransactionProcessor):
         ]
 
     def process(self, transaction: Transaction) -> Transaction:
-        if "fixed" in transaction.tags or transaction.datetime is None:
+        if "fixed" in transaction.tags or "transfers" in transaction.tags or transaction.datetime is None:
             return transaction
         for start, end, tags in self.rules:
             if start <= transaction.datetime <= end:
