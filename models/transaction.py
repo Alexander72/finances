@@ -30,4 +30,5 @@ class Transaction:
             ";".join(sorted(self.tags)),
             amount_str,
             self.description,
+            self.origin,
         ]

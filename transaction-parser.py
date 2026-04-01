@@ -32,6 +32,7 @@ for path in sorted(input_folder.iterdir()):
             print(f"Converted: {path.name} → {out.name}")
 
 # Phase 2: parse CSVs
+all_transactions = []
 for path in sorted(input_folder.glob("*.csv")):
     reader = reader_registry.find(path)
     if reader is None:
@@ -39,5 +40,8 @@ for path in sorted(input_folder.glob("*.csv")):
         continue
     transactions = reader.read(path)
     processed = [pipeline.process(t) for t in transactions]
-    output_path = writer.write(path, processed)
-    print(f"{path.name} → {output_path.name} ({len(processed)} rows)")
+    all_transactions.extend(processed)
+    print(f"{path.name}: {len(processed)} rows")
+
+output_path = writer.write(all_transactions)
+print(f"→ {output_path.name} ({len(all_transactions)} rows total)")
