@@ -17,6 +17,8 @@ _NAAM = re.compile(r"Naam:\s*(.+?)(?:\s{2,}|$)")
 _NAME_SLASH = re.compile(r"/NAME/([^/]+)")
 # Card / ATM payments: "BEA, Betaalpas   Merchant Name,PAS512 ..."
 _BEA_GEA = re.compile(r"^(?:BEA|GEA),\s*\w+\s+(.+?),PAS", re.IGNORECASE)
+# "Pay   Merchant Name" — contactless/debit card prefix with trailing spaces
+_PAY_PREFIX = re.compile(r"^Pay\s{2,}", re.IGNORECASE)
 
 
 def _extract_name(description: str) -> str:
@@ -27,21 +29,22 @@ def _extract_name(description: str) -> str:
     2. /NAME/<name>/         (new ISO 20022 format)
     3. BEA/GEA card payment  (merchant name before ,PAS)
     4. First whitespace-collapsed segment (fallback)
+
+    After extraction, a leading "Pay<spaces>" prefix (Apple Pay / contactless)
+    is stripped so the actual merchant name is returned.
     """
     m = _NAAM.search(description)
     if m:
-        return m.group(1).strip()
+        name = m.group(1).strip()
+    elif m := _NAME_SLASH.search(description):
+        name = m.group(1).strip()
+    elif m := _BEA_GEA.search(description):
+        name = m.group(1).strip()
+    else:
+        parts = re.split(r"\s{2,}", description.strip())
+        name = parts[0].strip() if parts else description
 
-    m = _NAME_SLASH.search(description)
-    if m:
-        return m.group(1).strip()
-
-    m = _BEA_GEA.search(description)
-    if m:
-        return m.group(1).strip()
-
-    parts = re.split(r"\s{2,}", description.strip())
-    return parts[0].strip() if parts else description
+    return _PAY_PREFIX.sub("", name).strip()
 
 
 class AbnAmroReader(BankReader):
