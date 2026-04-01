@@ -1,4 +1,4 @@
 INPUT_FOLDER = "data/input"
 OUTPUT_FOLDER = "data/output"
 
-from .rules_private import TAG_RULES, DATE_RULES  # noqa: E402, F401
+from .rules_private import NAME_TAG_RULES, DATE_RANGE_TAG_RULES  # noqa: E402, F401

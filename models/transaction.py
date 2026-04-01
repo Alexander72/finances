@@ -29,6 +29,6 @@ class Transaction:
             self.name,
             ";".join(sorted(self.tags)),
             amount_str,
-            self.description,
             self.origin,
+            self.description,
         ]

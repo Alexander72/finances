@@ -1,6 +1,7 @@
 from pathlib import Path
+from datetime import datetime
 
-from config import INPUT_FOLDER, OUTPUT_FOLDER, TAG_RULES, DATE_RULES
+from config import INPUT_FOLDER, OUTPUT_FOLDER, NAME_TAG_RULES, DATE_RANGE_TAG_RULES
 from converters import XlsToCsvConverter
 from pipeline import Pipeline
 from processors import NameTagProcessor, DateTagProcessor
@@ -12,8 +13,8 @@ converters = [XlsToCsvConverter()]
 
 # --- pipeline ---
 pipeline = Pipeline(
-    NameTagProcessor(TAG_RULES),
-    DateTagProcessor(DATE_RULES),
+    NameTagProcessor(NAME_TAG_RULES),
+    DateTagProcessor(DATE_RANGE_TAG_RULES),
 )
 
 # --- readers ---
@@ -43,5 +44,6 @@ for path in sorted(input_folder.glob("*.csv")):
     all_transactions.extend(processed)
     print(f"{path.name}: {len(processed)} rows")
 
+all_transactions.sort(key=lambda t: t.datetime or datetime.min)
 output_path = writer.write(all_transactions)
 print(f"→ {output_path.name} ({len(all_transactions)} rows total)")

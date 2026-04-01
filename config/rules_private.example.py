@@ -6,7 +6,7 @@
 # Each entry: ([substrings], [tags])
 # A transaction matches if ANY substring is found in the name (case-insensitive).
 # The special tag "fixed" prevents date-range rules from also tagging the transaction.
-TAG_RULES: list[tuple[list[str], list[str]]] = [
+NAME_TAG_RULES: list[tuple[list[str], list[str]]] = [
     # Utilities & fixed costs
     # (["Water Company", "Phone Provider"], ["utilities", "fixed"]),
     # Groceries
@@ -21,6 +21,6 @@ TAG_RULES: list[tuple[list[str], list[str]]] = [
 # start/end accept either "YYYY-MM-DD" or "YYYY-MM-DD HH:MM:SS".
 # Date-only boundaries expand to 00:00:00 (start) and 23:59:59 (end).
 # Applied only when the transaction does NOT already carry the "fixed" tag.
-DATE_RULES: list[tuple[str, str, list[str]]] = [
+DATE_RANGE_TAG_RULES: list[tuple[str, str, list[str]]] = [
     # ("2025-07-01", "2025-07-14", ["vacation", "trip to somewhere"]),
 ]

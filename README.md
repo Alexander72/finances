@@ -48,7 +48,7 @@ Rules live in `config/rules_private.py` (not committed — contains personal dat
 
 **Name rules** — tag by merchant name substring:
 ```python
-TAG_RULES = [
+NAME_TAG_RULES: list[tuple[list[str], list[str]]] = [
     (["Netflix", "Spotify"], ["subscriptions", "fixed"]),
     (["Albert Heijn", "Jumbo"], ["groceries"]),
 ]
@@ -58,7 +58,7 @@ The special tag `fixed` prevents date-range rules from also matching the transac
 
 **Date-range rules** — tag by transaction date or datetime:
 ```python
-DATE_RULES = [
+DATE_RANGE_TAG_RULES: list[tuple[str, str, list[str]]] = [
     ("2025-07-01", "2025-07-14", ["vacation", "trip to Italy"]),
     ("2025-12-24 18:00:00", "2025-12-24 23:59:59", ["christmas dinner"]),
 ]
