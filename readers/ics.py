@@ -1,10 +1,13 @@
 import csv
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
 
 from models import Transaction
 from .base import BankReader
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_dutch_amount(value: str) -> float | None:
@@ -26,26 +29,46 @@ class IcsReader(BankReader):
         with open(path, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                transactions.append(self._build(row))
+                transactions.append(self._build(row, path))
         return transactions
 
     @staticmethod
-    def _build(row: dict[str, str]) -> Transaction:
+    def _build(row: dict[str, str], path: Path) -> Transaction:
         # --- datetime ---
+        date_raw = row.get("transaction_date", "")
         try:
-            dt: datetime | None = datetime.strptime(
-                row.get("transaction_date", ""), "%Y-%m-%d"
-            )
+            dt: datetime | None = datetime.strptime(date_raw, "%Y-%m-%d")
         except ValueError:
+            if date_raw:
+                logger.warning(
+                    "%s: could not parse transaction_date '%s'", path.name, date_raw
+                )
             dt = None
 
         # --- amount ---
-        amount = _parse_dutch_amount(row.get("amount_eur", ""))
-        if amount is not None and row.get("direction") == "Af":
+        amount_raw = row.get("amount_eur", "")
+        amount = _parse_dutch_amount(amount_raw)
+        if amount is None and amount_raw:
+            logger.warning(
+                "%s: could not parse amount_eur '%s' on %s",
+                path.name,
+                amount_raw,
+                date_raw,
+            )
+
+        if "direction" not in row:
+            logger.warning(
+                "%s: missing 'direction' column on %s — sign not applied",
+                path.name,
+                date_raw,
+            )
+        elif amount is not None and row["direction"] == "Af":
             amount = -amount
 
         # --- name: raw description as-is ---
         name = row.get("description", "")
+        if not name:
+            logger.warning("%s: empty description on %s", path.name, date_raw)
 
         # --- description: append foreign currency info if present ---
         fx_amount = row.get("amount_foreign", "")

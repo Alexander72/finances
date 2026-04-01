@@ -1,4 +1,5 @@
 import csv
+import logging
 import re
 from datetime import date
 from pathlib import Path
@@ -6,6 +7,8 @@ from pathlib import Path
 import pdfplumber
 
 from .base import FileConverter
+
+logger = logging.getLogger(__name__)
 
 # Dutch month name mappings
 _MONTHS_ABBREV: dict[str, int] = {
@@ -65,7 +68,10 @@ def _in_col(words: list[dict], x_min: int, x_max: int) -> list[dict]:
 
 
 def _parse_abbrev_date(day: str, month: str) -> tuple[int, int]:
-    return int(day), _MONTHS_ABBREV.get(month.lower(), 0)
+    month_num = _MONTHS_ABBREV.get(month.lower(), 0)
+    if month_num == 0:
+        logger.warning("Unrecognized Dutch month abbreviation: '%s'", month)
+    return int(day), month_num
 
 
 def _resolve_year(tx_month: int, stmt_month: int, stmt_year: int) -> int:
@@ -81,24 +87,51 @@ class IcsPdfConverter(FileConverter):
 
     def convert(self, path: Path) -> Path:
         out_path = path.with_suffix(".csv")
-        rows = self._parse_pdf(path)
-        with open(out_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=CSV_HEADER)
-            writer.writeheader()
-            writer.writerows(rows)
+        try:
+            rows = self._parse_pdf(path)
+        except Exception as e:
+            logger.error("Failed to parse PDF %s: %s", path, e)
+            raise
+
+        try:
+            with open(out_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=CSV_HEADER)
+                writer.writeheader()
+                writer.writerows(rows)
+        except OSError as e:
+            logger.error("Could not write CSV to %s: %s", out_path, e)
+            raise
+
         return out_path
 
     def _parse_pdf(self, path: Path) -> list[dict]:
-        with pdfplumber.open(path) as pdf:
-            all_words: list[dict] = []
-            for page in pdf.pages:
-                all_words.extend(
-                    w for w in page.extract_words() if w["height"] >= _MIN_WORD_HEIGHT
-                )
+        try:
+            with pdfplumber.open(path) as pdf:
+                all_words: list[dict] = []
+                for page in pdf.pages:
+                    page_words = page.extract_words()
+                    if not page_words:
+                        logger.warning(
+                            "%s: page %s yielded no extractable words",
+                            path.name,
+                            page.page_number,
+                        )
+                    all_words.extend(
+                        w for w in page_words if w["height"] >= _MIN_WORD_HEIGHT
+                    )
+        except Exception as e:
+            logger.error("pdfplumber could not open %s: %s", path, e)
+            raise
+
+        if not all_words:
+            logger.error(
+                "%s: no words extracted from PDF — possibly a scanned image", path.name
+            )
+            raise ValueError(f"No extractable text in {path}")
 
         stmt_month, stmt_year = self._extract_statement_date(all_words)
         lines = self._group_into_lines(all_words)
-        return self._extract_transactions(lines, stmt_month, stmt_year)
+        return self._extract_transactions(lines, stmt_month, stmt_year, path)
 
     @staticmethod
     def _extract_statement_date(words: list[dict]) -> tuple[int, int]:
@@ -128,7 +161,7 @@ class IcsPdfConverter(FileConverter):
         ]
 
     def _extract_transactions(
-        self, lines: list[list[dict]], stmt_month: int, stmt_year: int
+        self, lines: list[list[dict]], stmt_month: int, stmt_year: int, path: Path
     ) -> list[dict]:
         rows: list[dict] = []
 
@@ -152,14 +185,49 @@ class IcsPdfConverter(FileConverter):
                 and dir_texts[0] in ("Af", "Bij")
             ):
                 tx_day, tx_month = _parse_abbrev_date(tx_texts[0], tx_texts[1])
-                tx_year = _resolve_year(tx_month, stmt_month, stmt_year)
-                tx_date = date(tx_year, tx_month, tx_day).isoformat()
+                if tx_month == 0:
+                    logger.warning(
+                        "%s: skipping row with unrecognized month '%s'",
+                        path.name,
+                        tx_texts[1],
+                    )
+                    continue
+                try:
+                    tx_year = _resolve_year(tx_month, stmt_month, stmt_year)
+                    tx_date = date(tx_year, tx_month, tx_day).isoformat()
+                except ValueError as e:
+                    logger.warning(
+                        "%s: invalid transaction date %s/%s: %s",
+                        path.name,
+                        tx_day,
+                        tx_month,
+                        e,
+                    )
+                    continue
 
                 bk_texts = [w["text"] for w in booking_words]
                 if len(bk_texts) == 2:
                     bk_day, bk_month = _parse_abbrev_date(bk_texts[0], bk_texts[1])
-                    bk_year = _resolve_year(bk_month, stmt_month, stmt_year)
-                    booking_date = date(bk_year, bk_month, bk_day).isoformat()
+                    if bk_month == 0:
+                        logger.warning(
+                            "%s: unrecognized booking month '%s', using tx_date",
+                            path.name,
+                            bk_texts[1],
+                        )
+                        booking_date = tx_date
+                    else:
+                        try:
+                            bk_year = _resolve_year(bk_month, stmt_month, stmt_year)
+                            booking_date = date(bk_year, bk_month, bk_day).isoformat()
+                        except ValueError as e:
+                            logger.warning(
+                                "%s: invalid booking date (%s-%s): %s — using tx_date",
+                                path.name,
+                                bk_day,
+                                bk_month,
+                                e,
+                            )
+                            booking_date = tx_date
                 else:
                     booking_date = tx_date
 
@@ -187,7 +255,13 @@ class IcsPdfConverter(FileConverter):
                 # Format: "Wisselkoers CCY rate" — rate word ends up in desc_col
                 rate_words = [w["text"] for w in desc_words]
                 # rate_words = ["Wisselkoers", "CCY", "rate_value"]
-                rate = rate_words[2] if len(rate_words) >= 3 else ""
-                rows[-1]["exchange_rate"] = rate
+                if len(rate_words) >= 3:
+                    rows[-1]["exchange_rate"] = rate_words[2]
+                else:
+                    logger.warning(
+                        "%s: Wisselkoers line has fewer than 3 words: %s",
+                        path.name,
+                        rate_words,
+                    )
 
         return rows

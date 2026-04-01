@@ -1,10 +1,13 @@
 import csv
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
 
 from models import Transaction
 from .base import BankReader
+
+logger = logging.getLogger(__name__)
 
 # Matches "Datum/Tijd: DD-MM-YYYY HH:MM:SS" — online banking / wire transfers
 _PATTERN_DATUM_TIJD = re.compile(
@@ -25,15 +28,27 @@ def _resolve_datetime(memo: str, booking_date: str) -> datetime | None:
     """
     m = _PATTERN_DATUM_TIJD.search(memo)
     if m:
-        return datetime.strptime(f"{m.group(1)} {m.group(2)}", "%d-%m-%Y %H:%M:%S")
+        try:
+            return datetime.strptime(f"{m.group(1)} {m.group(2)}", "%d-%m-%Y %H:%M:%S")
+        except ValueError as e:
+            logger.warning(
+                "Could not parse Datum/Tijd '%s %s': %s", m.group(1), m.group(2), e
+            )
 
     m = _PATTERN_DT_MINUTE.search(memo)
     if m:
-        return datetime.strptime(f"{m.group(1)} {m.group(2)}", "%d-%m-%Y %H:%M")
+        try:
+            return datetime.strptime(f"{m.group(1)} {m.group(2)}", "%d-%m-%Y %H:%M")
+        except ValueError as e:
+            logger.warning(
+                "Could not parse date/time '%s %s': %s", m.group(1), m.group(2), e
+            )
 
     try:
         return datetime.strptime(booking_date, "%Y%m%d")
     except ValueError:
+        if booking_date:
+            logger.warning("Could not parse ING booking date '%s'", booking_date)
         return None
 
 
@@ -48,19 +63,33 @@ class IngReader(BankReader):
         with open(path, newline="", encoding="utf-8") as f:
             reader = csv.reader(f)
             header = next(reader, None)
-            if header is None:
+            if not header:
+                logger.warning("Empty or missing header in %s — skipping", path)
                 return transactions
             for row in reader:
                 if not row:
                     continue
                 source_data = dict(zip(header, row))
-                transactions.append(self._build(source_data))
+                transactions.append(self._build(source_data, path))
         return transactions
 
     @staticmethod
-    def _build(source_data: dict[str, str]) -> Transaction:
+    def _build(source_data: dict[str, str], path: Path) -> Transaction:
         booking_date = source_data.get("Datum", "")
         memo = source_data.get("Mededelingen", "")
+
+        if "Bedrag (EUR)" not in source_data:
+            logger.warning(
+                "%s: missing 'Bedrag (EUR)' column in row %s",
+                path.name,
+                source_data.get("Datum", "?"),
+            )
+        if "Af Bij" not in source_data:
+            logger.warning(
+                "%s: missing 'Af Bij' column in row %s",
+                path.name,
+                source_data.get("Datum", "?"),
+            )
 
         raw_amount = source_data.get("Bedrag (EUR)", "")
         direction = source_data.get("Af Bij", "")
@@ -69,6 +98,12 @@ class IngReader(BankReader):
             if direction == "Af":
                 amount = -amount
         except ValueError:
+            logger.warning(
+                "%s: could not parse amount '%s' on %s",
+                path.name,
+                raw_amount,
+                booking_date,
+            )
             amount = None
 
         return Transaction(

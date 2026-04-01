@@ -1,7 +1,10 @@
+import logging
 from datetime import datetime
 
 from models import Transaction
 from pipeline import TransactionProcessor
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_boundary(value: str, is_end: bool) -> datetime:
@@ -19,23 +22,43 @@ def _parse_boundary(value: str, is_end: bool) -> datetime:
 
 
 class DateTagProcessor(TransactionProcessor):
-    """Adds tags based on date/datetime ranges; skips transactions already tagged 'recurrent'."""
+    """Adds tags based on date/datetime ranges; skips transactions already tagged 'recurrent'.
 
-    def __init__(self, rules: list[tuple[str, str, list[str]]]) -> None:
-        # Pre-parse rule boundaries once at construction time
-        self.rules: list[tuple[datetime, datetime, list[str]]] = [
-            (
-                _parse_boundary(start, is_end=False),
-                _parse_boundary(end, is_end=True),
-                tags,
-            )
-            for start, end, tags in rules
-        ]
+    Each rule is a tuple of (start, end, tags) or (start, end, tags, persons).
+    If persons is provided, the rule only applies to transactions from those persons.
+    """
+
+    def __init__(self, rules: list[tuple]) -> None:
+        # Pre-parse rule boundaries once at construction time; skip malformed rules
+        self.rules: list[tuple[datetime, datetime, list[str], list[str] | None]] = []
+        for i, rule in enumerate(rules):
+            try:
+                self.rules.append(
+                    (
+                        _parse_boundary(rule[0], is_end=False),
+                        _parse_boundary(rule[1], is_end=True),
+                        rule[2],
+                        rule[3] if len(rule) >= 4 else None,
+                    )
+                )
+            except (ValueError, IndexError) as e:
+                logger.error(
+                    "Skipping malformed DATE_RANGE_TAG_RULES entry #%d %s: %s",
+                    i,
+                    rule,
+                    e,
+                )
 
     def process(self, transaction: Transaction) -> Transaction:
-        if "recurrent" in transaction.tags or "transfers" in transaction.tags or transaction.datetime is None:
+        if (
+            "recurrent" in transaction.tags
+            or "transfers" in transaction.tags
+            or transaction.datetime is None
+        ):
             return transaction
-        for start, end, tags in self.rules:
+        for start, end, tags, persons in self.rules:
+            if persons is not None and transaction.person not in persons:
+                continue
             if start <= transaction.datetime <= end:
                 transaction.tags.update(tags)
         return transaction

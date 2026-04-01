@@ -70,11 +70,15 @@ NAME_TAG_RULES: list[tuple[list[str], list[str]]] = [
 
 The special tag `recurrent` prevents date-range rules from also matching the transaction.
 
-**Date-range rules** — tag by transaction date or datetime:
+**Date-range rules** — tag by transaction date or datetime. An optional 4th element restricts the rule to specific persons; omit it to apply to everyone:
 ```python
-DATE_RANGE_TAG_RULES: list[tuple[str, str, list[str]]] = [
-    ("2025-07-01", "2025-07-14", ["vacation", "trip to Italy"]),
+DATE_RANGE_TAG_RULES: list[tuple] = [
+    # applies to everyone
     ("2025-12-24 18:00:00", "2025-12-24 23:59:59", ["christmas dinner"]),
+    # applies only to alexander
+    ("2025-07-01", "2025-07-14", ["vacation", "trip to Italy"], ["alexander"]),
+    # applies to alexander and maria
+    ("2025-08-01", "2025-08-15", ["vacation", "trip to Greece"], ["alexander", "maria"]),
 ]
 ```
 

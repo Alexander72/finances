@@ -1,10 +1,13 @@
 import csv
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
 
 from models import Transaction
 from .base import BankReader
+
+logger = logging.getLogger(__name__)
 
 _ABNAMRO_PATTERN = re.compile(r"ABN.?AMRO", re.IGNORECASE)
 
@@ -54,29 +57,40 @@ class AbnAmroReader(BankReader):
         with open(path, newline="", encoding="utf-8") as f:
             reader = csv.reader(f)
             header = next(reader, None)
-            if header is None:
+            if not header:
+                logger.warning("Empty or missing header in %s — skipping", path)
                 return transactions
             for row in reader:
                 if not row:
                     continue
                 source_data = dict(zip(header, row))
-                transactions.append(self._build(source_data))
+                transactions.append(self._build(source_data, path))
         return transactions
 
     @staticmethod
-    def _build(source_data: dict[str, str]) -> Transaction:
+    def _build(source_data: dict[str, str], path: Path) -> Transaction:
         date_str = source_data.get("transactiondate", "")
         try:
             dt: datetime | None = datetime.strptime(date_str, "%Y%m%d")
         except ValueError:
+            if date_str:
+                logger.warning("%s: could not parse date '%s'", path.name, date_str)
             dt = None
 
         try:
             amount: float | None = float(source_data.get("amount", ""))
         except ValueError:
+            logger.warning(
+                "%s: could not parse amount '%s' on %s",
+                path.name,
+                source_data.get("amount", ""),
+                date_str,
+            )
             amount = None
 
         description = source_data.get("description", "")
+        if not description:
+            logger.warning("%s: missing description on %s", path.name, date_str)
 
         return Transaction(
             datetime=dt,

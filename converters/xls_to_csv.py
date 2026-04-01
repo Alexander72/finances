@@ -1,10 +1,13 @@
 import csv
+import logging
 import re
 from pathlib import Path
 
 import xlrd
 
 from .base import FileConverter
+
+logger = logging.getLogger(__name__)
 
 _ABNAMRO_PATTERN = re.compile(r"ABN.?AMRO", re.IGNORECASE)
 
@@ -17,7 +20,12 @@ def _cell_to_str(cell) -> str:
     """
     if cell.ctype == xlrd.XL_CELL_NUMBER:
         v = cell.value
-        return str(int(v)) if v == int(v) else str(v)
+        try:
+            if v == int(v):
+                return str(int(v))
+        except (ValueError, OverflowError):
+            logger.warning("Skipping int conversion for non-finite cell value: %s", v)
+        return str(v)
     return str(cell.value)
 
 
@@ -30,11 +38,28 @@ class XlsToCsvConverter(FileConverter):
         )
 
     def convert(self, path: Path) -> Path:
-        wb = xlrd.open_workbook(str(path))
-        ws = wb.sheet_by_index(0)
+        try:
+            wb = xlrd.open_workbook(str(path))
+        except Exception as e:
+            logger.error("Could not open XLS file %s: %s", path, e)
+            raise
+
+        try:
+            ws = wb.sheet_by_index(0)
+        except IndexError:
+            logger.error("XLS file %s contains no sheets", path)
+            raise
+
         out_path = path.with_suffix(".csv")
-        with open(out_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            for i in range(ws.nrows):
-                writer.writerow([_cell_to_str(ws.cell(i, j)) for j in range(ws.ncols)])
+        try:
+            with open(out_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                for i in range(ws.nrows):
+                    writer.writerow(
+                        [_cell_to_str(ws.cell(i, j)) for j in range(ws.ncols)]
+                    )
+        except OSError as e:
+            logger.error("Could not write CSV to %s: %s", out_path, e)
+            raise
+
         return out_path

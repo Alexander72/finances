@@ -17,10 +17,16 @@ NAME_TAG_RULES: list[tuple[list[str], list[str]]] = [
 ]
 
 # --- Date-range rules ---
-# Each entry: (start, end, [tags])
+# Each entry: (start, end, [tags]) or (start, end, [tags], [persons])
 # start/end accept either "YYYY-MM-DD" or "YYYY-MM-DD HH:MM:SS".
 # Date-only boundaries expand to 00:00:00 (start) and 23:59:59 (end).
 # Applied only when the transaction does NOT already carry the "recurrent" tag.
-DATE_RANGE_TAG_RULES: list[tuple[str, str, list[str]]] = [
-    # ("2025-07-01", "2025-07-14", ["vacation", "trip to somewhere"]),
+# The optional 4th element restricts the rule to specific persons (by subfolder name).
+DATE_RANGE_TAG_RULES: list[tuple] = [
+    # Applies to everyone:
+    # ("2025-12-24", "2025-12-26", ["christmas"]),
+    # Applies only to alexander:
+    # ("2025-07-01", "2025-07-14", ["vacation", "trip to Italy"], ["alexander"]),
+    # Applies to alexander and maria:
+    # ("2025-08-01", "2025-08-15", ["vacation", "trip to Greece"], ["alexander", "maria"]),
 ]
