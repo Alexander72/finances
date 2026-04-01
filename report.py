@@ -12,7 +12,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 TRANSACTIONS_FILE = Path(OUTPUT_FOLDER) / "transactions.csv"
-REPORT_FILE = Path(OUTPUT_FOLDER) / "report.csv"
 
 
 def main() -> None:
@@ -22,7 +21,8 @@ def main() -> None:
         )
         raise SystemExit(1)
 
-    totals: dict[tuple[str, str], float] = defaultdict(float)
+    # totals[person][tag] = float
+    totals: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     skipped = 0
 
     with open(TRANSACTIONS_FILE, newline="", encoding="utf-8") as f:
@@ -49,27 +49,31 @@ def main() -> None:
                 for tag in tags_raw.split(";"):
                     tag = tag.strip()
                     if tag:
-                        totals[(person, tag)] += amount
+                        totals[person][tag] += amount
             else:
-                totals[(person, "(untagged)")] += amount
+                totals[person]["(untagged)"] += amount
 
     if skipped:
         logger.warning("Skipped %d row(s) due to unparseable amounts", skipped)
 
-    # Sort by person alphabetically, then by total ascending (biggest expenses first)
-    sorted_totals = sorted(totals.items(), key=lambda x: (x[0][0], x[1]))
+    output_dir = Path(OUTPUT_FOLDER)
+    written: list[str] = []
 
-    try:
-        with open(REPORT_FILE, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["person", "tag", "total"])
-            for (person, tag), total in sorted_totals:
-                writer.writerow([person, tag, f"{total:.2f}"])
-    except OSError as e:
-        logger.error("Failed to write report to %s: %s", REPORT_FILE, e)
-        raise SystemExit(1)
-
-    print(f"Report written to {REPORT_FILE} ({len(sorted_totals)} rows)")
+    for person, tag_totals in sorted(totals.items()):
+        # Sort by total ascending so biggest expenses appear first
+        sorted_rows = sorted(tag_totals.items(), key=lambda x: x[1])
+        report_file = output_dir / f"report_{person}.csv"
+        try:
+            with open(report_file, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["tag", "total"])
+                for tag, total in sorted_rows:
+                    writer.writerow([tag, f"{total:.2f}"])
+        except OSError as e:
+            logger.error("Failed to write report to %s: %s", report_file, e)
+            raise SystemExit(1)
+        print(f"Report written to {report_file} ({len(sorted_rows)} rows)")
+        written.append(str(report_file))
 
 
 if __name__ == "__main__":
