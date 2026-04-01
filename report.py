@@ -57,10 +57,9 @@ def main() -> None:
         logger.warning("Skipped %d row(s) due to unparseable amounts", skipped)
 
     output_dir = Path(OUTPUT_FOLDER)
-    written: list[str] = []
 
+    # Per-person reports
     for person, tag_totals in sorted(totals.items()):
-        # Sort by total ascending so biggest expenses appear first
         sorted_rows = sorted(tag_totals.items(), key=lambda x: x[1])
         report_file = output_dir / f"report_{person}.csv"
         try:
@@ -73,7 +72,24 @@ def main() -> None:
             logger.error("Failed to write report to %s: %s", report_file, e)
             raise SystemExit(1)
         print(f"Report written to {report_file} ({len(sorted_rows)} rows)")
-        written.append(str(report_file))
+
+    # Aggregated report across all persons
+    aggregated: dict[str, float] = defaultdict(float)
+    for tag_totals in totals.values():
+        for tag, total in tag_totals.items():
+            aggregated[tag] += total
+    sorted_agg = sorted(aggregated.items(), key=lambda x: x[1])
+    agg_file = output_dir / "report_all.csv"
+    try:
+        with open(agg_file, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["tag", "total"])
+            for tag, total in sorted_agg:
+                writer.writerow([tag, f"{total:.2f}"])
+    except OSError as e:
+        logger.error("Failed to write report to %s: %s", agg_file, e)
+        raise SystemExit(1)
+    print(f"Report written to {agg_file} ({len(sorted_agg)} rows)")
 
 
 if __name__ == "__main__":
