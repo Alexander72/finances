@@ -3,19 +3,7 @@ from pathlib import Path
 
 from models import Transaction
 
-HEADER = [
-    "datetime",
-    "name",
-    "tags",
-    "amount",
-    "account",
-    "counter_account",
-    "code",
-    "direction",
-    "transaction_type",
-    "memo",
-    "balance",
-]
+HEADER = ["datetime", "name", "tags", "amount", "description"]
 
 
 class CsvWriter:

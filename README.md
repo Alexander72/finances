@@ -1,44 +1,46 @@
 # finances
 
-Personal finance transaction parser for ING bank CSV exports.
+Personal finance transaction parser supporting ING and ABNAMRO bank exports.
 
-Reads raw CSVs from `data/input/`, enriches each transaction with tags and a resolved datetime, and writes cleaned CSVs to `data/output/`.
+Reads raw files from `data/input/`, enriches each transaction with tags and a resolved datetime, and writes cleaned CSVs to `data/output/`.
 
 ## Setup
 
 ```bash
 git clone <repo>
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 cp config/rules_private.example.py config/rules_private.py
 # edit config/rules_private.py — add your TAG_RULES and DATE_RULES
-# drop ING export *.csv files into data/input/
-python3 transaction-parser.py
+# drop ING *.csv and/or ABNAMRO *.xls files into data/input/
 ```
-
-No dependencies beyond the Python standard library.
 
 ## Usage
 
 ```bash
-python3 transaction-parser.py
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+python transaction-parser.py
 ```
 
-One output file is produced per input file: `data/output/<name>_PARSED.csv`.
+ABNAMRO `.xls` files are automatically converted to `.csv` before parsing. One output file is produced per input file: `data/output/<name>_PARSED.csv`.
+
+## Supported formats
+
+| Bank | File format | Notes |
+|---|---|---|
+| ING | `.csv` | Filename must contain `ING`; datetime extracted from memo field |
+| ABNAMRO | `.xls` | Filename must contain `ABNAMRO`; auto-converted to CSV; no time info |
 
 ## Output columns
 
 | Column | Description |
 |---|---|
-| `datetime` | Actual transaction datetime from memo field; falls back to booking date |
-| `name` | Payee name |
+| `datetime` | `YYYY-MM-DD HH:MM:SS` when time is known; `YYYY-MM-DD` when only a date is available |
+| `name` | Payee / merchant name |
 | `tags` | Semicolon-separated computed tags |
 | `amount` | Signed float — negative for debits |
-| `account` | Own account number |
-| `counter_account` | Counter-party account number |
-| `code` | ING transaction code |
-| `direction` | `Af` (debit) or `Bij` (credit) |
-| `transaction_type` | ING mutation type |
-| `memo` | Full memo field |
-| `balance` | Balance after transaction |
+| `description` | Full memo / description field from source |
 
 ## Tagging rules
 
@@ -67,24 +69,30 @@ Boundaries accept `YYYY-MM-DD` (date-only expands to `00:00:00` / `23:59:59`) or
 ## Project structure
 
 ```
-transaction-parser.py        entry point
+transaction-parser.py        entry point (convert phase → parse phase)
+requirements.txt             Python dependencies (xlrd)
 config/
   rules.py                   folder paths; re-exports from rules_private
   rules_private.py           personal tagging rules (gitignored)
   rules_private.example.py   template — copy this to rules_private.py
 models/
-  transaction.py             Transaction dataclass
+  transaction.py             bank-agnostic Transaction dataclass
 pipeline/
   __init__.py                TransactionProcessor ABC + Pipeline
 processors/
-  date_parser.py             resolves transaction datetime from memo
   name_tag.py                applies TAG_RULES
   date_tag.py                applies DATE_RULES
+converters/
+  base.py                    abstract FileConverter
+  xls_to_csv.py              XlsToCsvConverter: ABNAMRO .xls → .csv
 readers/
-  csv_reader.py              discovers and reads input CSVs
+  base.py                    abstract BankReader
+  registry.py                ReaderRegistry: selects reader by filename
+  ing.py                     ING CSV reader + datetime extraction
+  abnamro.py                 ABNAMRO CSV reader + name extraction
 writers/
   csv_writer.py              writes output CSVs
 data/
-  input/                     drop ING export files here (gitignored)
+  input/                     drop export files here (gitignored)
   output/                    generated files written here (gitignored)
 ```

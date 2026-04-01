@@ -9,6 +9,7 @@ config/rules_private.py
 # Python
 __pycache__/
 *.py[cod]
+.venv/
 
 # IDE
 .idea/
