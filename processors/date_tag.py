@@ -19,7 +19,7 @@ def _parse_boundary(value: str, is_end: bool) -> datetime:
 
 
 class DateTagProcessor(TransactionProcessor):
-    """Adds tags based on date/datetime ranges; skips transactions already tagged 'fixed'."""
+    """Adds tags based on date/datetime ranges; skips transactions already tagged 'recurrent'."""
 
     def __init__(self, rules: list[tuple[str, str, list[str]]]) -> None:
         # Pre-parse rule boundaries once at construction time
@@ -33,7 +33,7 @@ class DateTagProcessor(TransactionProcessor):
         ]
 
     def process(self, transaction: Transaction) -> Transaction:
-        if "fixed" in transaction.tags or "transfers" in transaction.tags or transaction.datetime is None:
+        if "recurrent" in transaction.tags or "transfers" in transaction.tags or transaction.datetime is None:
             return transaction
         for start, end, tags in self.rules:
             if start <= transaction.datetime <= end:

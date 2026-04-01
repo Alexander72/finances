@@ -10,7 +10,8 @@ class Transaction:
     name: str  # payee name
     amount: float | None  # signed float; negative = debit
     description: str  # full memo / description text
-    origin: str  # "ing" | "abnamro"
+    origin: str  # "ing" | "abnamro" | "ics" | "revolut"
+    person: str = ""  # subfolder name, e.g. "alexander"
     tags: set[str] = field(default_factory=set)
     source_data: dict[str, str] = field(default_factory=dict)
 
@@ -26,6 +27,7 @@ class Transaction:
         amount_str = f"{self.amount:.2f}" if self.amount is not None else ""
         return [
             date_str,
+            self.person,
             self.name,
             ";".join(sorted(self.tags)),
             amount_str,
