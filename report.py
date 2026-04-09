@@ -1,17 +1,17 @@
-import csv
 import logging
-from collections import defaultdict
-from pathlib import Path
 
-from config import OUTPUT_FOLDER
+from reporting import (
+    TRANSACTIONS_FILE,
+    load_transactions,
+    write_all_monthly_reports,
+    write_all_annual_reports,
+)
 
 logging.basicConfig(
-    level=logging.WARNING,
+    level=logging.INFO,
     format="%(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-TRANSACTIONS_FILE = Path(OUTPUT_FOLDER) / "transactions.csv"
 
 
 def main() -> None:
@@ -21,75 +21,20 @@ def main() -> None:
         )
         raise SystemExit(1)
 
-    # totals[person][tag] = float
-    totals: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-    skipped = 0
+    logger.info("Loading transactions from %s", TRANSACTIONS_FILE)
+    df = load_transactions()
+    logger.info("Loaded %d transactions", len(df))
 
-    with open(TRANSACTIONS_FILE, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        if reader.fieldnames and not {"person", "tags", "amount"}.issubset(
-            reader.fieldnames
-        ):
-            logger.error(
-                "Unexpected columns in %s: %s", TRANSACTIONS_FILE, reader.fieldnames
-            )
-            raise SystemExit(1)
-        for row in reader:
-            try:
-                amount = float(row["amount"])
-            except (ValueError, KeyError) as e:
-                logger.warning(
-                    "Skipping row with unparseable amount (%s): %s", e, dict(row)
-                )
-                skipped += 1
-                continue
-            person = row.get("person", "").strip()
-            tags_raw = row.get("tags", "").strip()
-            if tags_raw:
-                for tag in tags_raw.split(";"):
-                    tag = tag.strip()
-                    if tag:
-                        totals[person][tag] += amount
-            else:
-                totals[person]["(untagged)"] += amount
+    logger.info("Generating monthly reports…")
+    monthly_paths = write_all_monthly_reports(df)
+    logger.info("Written %d monthly report file(s)", len(monthly_paths))
 
-    if skipped:
-        logger.warning("Skipped %d row(s) due to unparseable amounts", skipped)
+    logger.info("Generating annual reports…")
+    annual_paths = write_all_annual_reports(df)
+    logger.info("Written %d annual report file(s)", len(annual_paths))
 
-    output_dir = Path(OUTPUT_FOLDER)
-
-    # Per-person reports
-    for person, tag_totals in sorted(totals.items()):
-        sorted_rows = sorted(tag_totals.items(), key=lambda x: x[1])
-        report_file = output_dir / f"report_{person}.csv"
-        try:
-            with open(report_file, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(["tag", "total"])
-                for tag, total in sorted_rows:
-                    writer.writerow([tag, f"{total:.2f}"])
-        except OSError as e:
-            logger.error("Failed to write report to %s: %s", report_file, e)
-            raise SystemExit(1)
-        print(f"Report written to {report_file} ({len(sorted_rows)} rows)")
-
-    # Aggregated report across all persons
-    aggregated: dict[str, float] = defaultdict(float)
-    for tag_totals in totals.values():
-        for tag, total in tag_totals.items():
-            aggregated[tag] += total
-    sorted_agg = sorted(aggregated.items(), key=lambda x: x[1])
-    agg_file = output_dir / "report_all.csv"
-    try:
-        with open(agg_file, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["tag", "total"])
-            for tag, total in sorted_agg:
-                writer.writerow([tag, f"{total:.2f}"])
-    except OSError as e:
-        logger.error("Failed to write report to %s: %s", agg_file, e)
-        raise SystemExit(1)
-    print(f"Report written to {agg_file} ({len(sorted_agg)} rows)")
+    total = len(monthly_paths) + len(annual_paths)
+    print(f"Done — {total} file(s) written.")
 
 
 if __name__ == "__main__":
